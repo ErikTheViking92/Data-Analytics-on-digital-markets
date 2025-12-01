@@ -1,0 +1,32 @@
+{
+  "summary": {
+    "months": 6,
+    "total_checked": 2,
+    "updated_count": 2,
+    "not_updated_count": 0,
+    "updated_stats": {
+      "count": 2,
+      "mean": 952645.5,
+      "median": 952645.5
+    },
+    "not_updated_stats": {
+      "count": 0,
+      "mean": null,
+      "median": null
+    }
+  },
+  "details": [
+    {
+      "appid": 570,
+      "updated_recently": true,
+      "owners_raw": "current_players:765991",
+      "owners_value": 765991.0
+    },
+    {
+      "appid": 730,
+      "updated_recently": true,
+      "owners_raw": "current_players:1139300",
+      "owners_value": 1139300.0
+    }
+  ]
+}
