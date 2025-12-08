@@ -24,6 +24,7 @@ from patch_extractor import extract_patches_for_games
 from scraper.steamcharts_scraper import fetch_monthly_series
 from scraper.store_scraper import SteamStoreScraper
 from scraper.steamdb_scraper import SteamDBScraper
+from scraper.reviews_scraper import fetch_app_reviews, read_api_key as read_api_key_reviews
 from scraper.cache import SteamCache
 
 
@@ -77,6 +78,9 @@ def build_panel(appids: List[int], out_csv: str = 'did_panel.csv', use_cache: bo
     cache = SteamCache() if use_cache else None
     store = SteamStoreScraper(cache=cache)
     steamdb = SteamDBScraper(cache=cache)
+    
+    # Read API key for reviews
+    api_key_reviews = read_api_key_reviews()
 
     # Extract patches for all apps via patch_extractor
     patch_out = extract_patches_for_games(appids, out_json='patches_past_year_for_panel.json')
@@ -96,11 +100,23 @@ def build_panel(appids: List[int], out_csv: str = 'did_panel.csv', use_cache: bo
             sdb = steamdb.fetch_app(appid)
         except Exception:
             sdb = None
+        
+        # Review data
+        try:
+            review_data = fetch_app_reviews(appid, api_key=api_key_reviews)
+        except Exception:
+            review_data = None
 
         owners_est = owners_from_steamdb(sdb)
         metacritic = None
         if store_data:
             metacritic = store_data.get('metacritic')
+        
+        review_count = None
+        review_positive_pct = None
+        if review_data:
+            review_count = review_data.get('total_reviews')
+            review_positive_pct = review_data.get('percent_positive')
 
         # Last major patch date
         last_major = extract_last_major_date(patch_summary, appid)
@@ -199,6 +215,8 @@ def build_panel(appids: List[int], out_csv: str = 'did_panel.csv', use_cache: bo
                 'peak_players': peak,
                 'owners_estimate': owners_est,
                 'metacritic_score': metacritic,
+                'review_count': review_count,
+                'review_positive_pct': review_positive_pct,
                 'treatment': treatment
             })
 

@@ -1,5 +1,5 @@
 {
-  "extraction_date": "2025-12-08T16:51:10.024445",
+  "extraction_date": "2025-12-08T18:23:28.422025",
   "period": "past 365 days",
   "summary": {
     "730": {
@@ -155,9 +155,9 @@
       "last_patch_date": "2025-11-12 11:40:36"
     },
     "1172470": {
-      "total_patches": 81,
+      "total_patches": 80,
       "major_patches": 67,
-      "minor_patches": 14,
+      "minor_patches": 13,
       "has_major_patch": true,
       "first_major_patch_date": "2025-03-31 17:05:00",
       "last_patch_date": "2025-12-03 01:50:44"
@@ -6723,15 +6723,6 @@
       "unix_timestamp": 1743440700,
       "is_major": true,
       "classification_reason": "major_keywords"
-    },
-    {
-      "appid": 1172470,
-      "title": "Beast Mode Event",
-      "contents": "{STEAM_CLAN_IMAGE}/38098458/6feb6b5df359004b149a82d6cd6365f715a17d81.jpg In Power Sword Royale, find and equip a Power Sword with its own specific abilities. In April Fools, have some fun with Mozambiques. Then, there’s Solos where it’s just you and your skill. Take the field as a Skirmisher and use two new perks — Trailblazer and Charged Knock — to dominate in the heat of the battle, and check out Alter’s latest ability updates. Don't miss your chance to conquer creator community challenges tog",
-      "date": "2025-03-25 18:04:50",
-      "unix_timestamp": 1742925890,
-      "is_major": false,
-      "classification_reason": "minor_keywords"
     },
     {
       "appid": 3949040,
