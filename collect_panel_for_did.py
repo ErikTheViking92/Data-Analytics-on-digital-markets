@@ -1,7 +1,7 @@
 """Collect panel data for staggered DiD around last major patch per game.
 
 Workflow:
-- Read a list of appids (from top30 results JSONs or a provided list).
+- Read a list of appids (from top100 results JSONs or a provided list).
 - For each appid, use `patch_extractor.extract_patches_for_games` logic to get last major patch date.
   (We will import patch_extractor.extract_patches_for_games or call the function if provided.)
 - Use `scraper.steamcharts_scraper.fetch_monthly_series` to get time series of player averages.
@@ -29,7 +29,7 @@ from scraper.cache import SteamCache
 
 
 def read_appids_from_top_files() -> List[int]:
-    files = ['top30_topsellers_results.json', 'top30_results.json']
+    files = ['top100_topsellers_results.json', 'top100_results.json']
     for fpath in files:
         if os.path.exists(fpath):
             with open(fpath, 'r', encoding='utf-8') as f:
