@@ -231,5 +231,5 @@ if __name__ == '__main__':
     if not appids:
         # fallback sample
         appids = [570, 730, 578080, 250820]
-    panel = build_panel(appids[:30])
+    panel = build_panel(appids[:100])  # limit to first 100 for testing
     print(panel.head())
