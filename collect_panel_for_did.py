@@ -221,6 +221,32 @@ def build_panel(appids: List[int], out_csv: str = 'did_panel.csv', use_cache: bo
             })
 
     df_panel = pd.DataFrame(rows)
+    
+    # Add dummy variables similar to google.csv
+    # Create period variable (1-indexed time period)
+    df_panel = df_panel.sort_values(['appid', 'rel_month']).reset_index(drop=True)
+    df_panel['period'] = df_panel.groupby('appid').cumcount() + 1
+    
+    # Create period_ch (1 if post-treatment, 0 if pre-treatment)
+    df_panel['period_ch'] = (df_panel['rel_month'] >= 0).astype(int)
+    
+    # Create dum (similar to 'post' indicator)
+    df_panel['dum'] = df_panel['period_ch']
+    
+    # Create did (treatment * post interaction)
+    df_panel['did'] = df_panel['treatment'] * df_panel['dum']
+    
+    # Create time dummy variables (timedum_1 through timedum_8)
+    # These represent the time periods 1-8 (corresponding to rel_month -4 to +3)
+    for i in range(1, 9):
+        # period i corresponds to rel_month = i - 5
+        df_panel[f'timedum_{i}'] = (df_panel['period'] == i).astype(int)
+    
+    # Create DiD interaction dummies (diddum_1 through diddum_8)
+    # These are treatment * timedum interactions
+    for i in range(1, 9):
+        df_panel[f'diddum_{i}'] = df_panel['treatment'] * df_panel[f'timedum_{i}']
+    
     df_panel.to_csv(out_csv, index=False)
     print(f"Wrote panel with {len(df_panel)} rows to {out_csv}")
     return df_panel

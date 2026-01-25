@@ -266,38 +266,6 @@ def main():
     # Example variables - replace with your actual variable names
     variables = ['goog', 'dum', 'ln_count_all', 'rating', 'experience']
     summary_statistics(data, variables)
-    
-    print("\nStep 2: Generate summary statistics")
-    print("Example: summary_statistics(data, ['goog', 'dum', 'ln_count_all'])")
-    
-    # Step 3: Run DiD Models
-    model_a = run_did_regression(data, 'ln_count_all ~ goog + dum + goog:dum', 'Model A: No Controls')
-    # Model A: Basic DiD without controls
-    # Formula: outcome ~ treatment + time + treatment:time
-    print("\nStep 3: Run DiD regressions")
-    print("Example Model A (no controls):")
-    print("model_a = run_did_regression(data, 'ln_count_all ~ goog + dum + goog:dum', 'Model A')")
-    
-    # Model B: DiD with control variables
-    print("\nExample Model B (with controls):")
-    print("model_b = run_did_regression(data, 'ln_count_all ~ goog + dum + goog:dum + rating + experience', 'Model B')")
-    
-    # Step 4: Create regression table
-    print("\nStep 4: Compare models in a table")
-    print("create_regression_table([model_a, model_b], model_names=['No Controls', 'With Controls'])")
-    
-    # Step 5: Test parallel trends
-    print("\nStep 5: Test parallel trends assumption")
-    print("time_dummies = ['timedum_1', 'timedum_2', 'timedum_3', 'timedum_5', 'timedum_6', 'timedum_7', 'timedum_8']")
-    print("model_trends = test_parallel_trends(data, 'goog', time_dummies, 'ln_count_all')")
-    
-    # Step 6: Plot DiD coefficients
-    print("\nStep 6: Plot DiD coefficients over time")
-    print("plot_did_coefficients(model_trends, 'goog', treatment_period=3.5, save_path='did_plot.png')")
-    
-    print("\n" + "="*60)
-    print("END OF ANALYSIS TEMPLATE")
-    print("="*60 + "\n")
 
 
 if __name__ == "__main__":
