@@ -1,0 +1,13 @@
+{
+  "model": "Staggered DiD",
+  "did_coefficient": -28228846283882.36,
+  "std_error": 7665714993797.545,
+  "p_value": 0.00023097550496211584,
+  "ci_lower": -43253371587474.234,
+  "ci_upper": -13204320980290.488,
+  "percent_change": -100.0,
+  "n_observations": 3500,
+  "n_games": 447,
+  "r_squared": 0.0718946837428911,
+  "adj_r_squared": 0.06976783111325591
+}
