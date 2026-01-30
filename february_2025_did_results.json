@@ -1,0 +1,12 @@
+{
+  "analysis_date": "2026-01-30T10:42:21.173488",
+  "treatment_date": "2025-02-15T00:00:00",
+  "n_treatment_games": 96,
+  "n_control_games": 89,
+  "total_observations": 760,
+  "did_coefficient": -0.005638613632128475,
+  "did_std_error": 0.01732167256619457,
+  "did_pvalue": 0.7447848058154771,
+  "r_squared": 0.12760436735720726,
+  "interpretation": "Major patches are associated with a -0.56% change in player counts"
+}

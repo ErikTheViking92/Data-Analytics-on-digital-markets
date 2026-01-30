@@ -146,15 +146,9 @@ def classify_major_patch(title: str, contents: str) -> tuple[bool, Optional[str]
     # UPDATED KEYWORDS: More specific major patch indicators
     major_indicators = [
         "major update", "major patch", "big update", "massive update",
-        "expansion", "new expansion", "dlc",
-        "content update", "content patch",
-        "new game mode", "new map", "new maps",
-        "new character", "new characters", "new weapon", "new weapons",
-        "gameplay change", "gameplay update", "mechanic change", "mechanics update",
-        "overhaul", "rework", "redesign",
-        "substantial", "significant", "massive",
-        "season", "new season", "battle pass",
-        "complete rework", "major rework", "major overhaul",
+        "expansion", "new expansion", "dlc", "new dlc",
+        "new game mode","new characters", "new weapons", "substantial", "significant", "massive",
+        "season", "new season", "complete rework", "major rework", "major overhaul",
         "major release", "major content"
     ]
     

@@ -1,13 +1,30 @@
 {
-  "model": "Staggered DiD",
-  "did_coefficient": -28228846283882.36,
-  "std_error": 7665714993797.545,
-  "p_value": 0.00023097550496211584,
-  "ci_lower": -43253371587474.234,
-  "ci_upper": -13204320980290.488,
-  "percent_change": -100.0,
-  "n_observations": 3500,
-  "n_games": 447,
-  "r_squared": 0.0718946837428911,
-  "adj_r_squared": 0.06976783111325591
+  "model_pooled": {
+    "did_coefficient": 19784641335473.746,
+    "std_error": 6321936191405.691,
+    "p_value": 0.0017509068357962178,
+    "ci_lower": 7393874087758.273,
+    "ci_upper": 32175408583189.22,
+    "percent_change": Infinity,
+    "r_squared": 0.1170219548607172
+  },
+  "model_with_game_fe": {
+    "did_coefficient": -0.00011418190376631665,
+    "std_error": 0.00012554295447891604,
+    "p_value": 0.3630837922451996,
+    "ci_lower": -0.00036024157305774353,
+    "ci_upper": 0.00013187776552511023,
+    "percent_change": -0.011417538526081739,
+    "r_squared": 0.9999926191600743
+  },
+  "n_observations": 2500,
+  "n_games": 436,
+  "n_time_periods": 5,
+  "treatment_groups": [
+    "jan",
+    "feb",
+    "mar",
+    "apr"
+  ],
+  "control_group_size": 100
 }

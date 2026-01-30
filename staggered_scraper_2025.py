@@ -121,17 +121,12 @@ def classify_major_patch(title: str, contents: str) -> tuple[bool, Optional[str]
     if not is_patch:
         return (False, None)
     
+    # UPDATED KEYWORDS: More specific major patch indicators
     major_indicators = [
         "major update", "major patch", "big update", "massive update",
-        "expansion", "new expansion", "dlc",
-        "content update", "content patch",
-        "new game mode", "new map", "new maps",
-        "new character", "new characters", "new weapon", "new weapons",
-        "gameplay change", "gameplay update", "mechanic change", "mechanics update",
-        "overhaul", "rework", "redesign",
-        "substantial", "significant", "massive",
-        "season", "new season", "battle pass",
-        "complete rework", "major rework", "major overhaul",
+        "expansion", "new expansion", "dlc", "new dlc",
+        "new game mode","new characters", "new weapons", "substantial", "significant", "massive",
+        "season", "new season", "complete rework", "major rework", "major overhaul",
         "major release", "major content"
     ]
     
@@ -255,12 +250,14 @@ def collect_staggered_groups(
             
             print(f"[{games_checked}] {aid} - {name}")
             
-            # Check each month
+            # Check each month (including December 2024)
+            dec_patches = get_major_patches_by_month(aid, 2024, 12, api_key)
             jan_patches = get_major_patches_by_month(aid, 2025, 1, api_key)
             feb_patches = get_major_patches_by_month(aid, 2025, 2, api_key)
             mar_patches = get_major_patches_by_month(aid, 2025, 3, api_key)
             apr_patches = get_major_patches_by_month(aid, 2025, 4, api_key)
             
+            has_dec = len(dec_patches) > 0
             has_jan = len(jan_patches) > 0
             has_feb = len(feb_patches) > 0
             has_mar = len(mar_patches) > 0
@@ -272,10 +269,12 @@ def collect_staggered_groups(
                 "appid": aid,
                 "name": name,
                 "collected_at": datetime.utcnow().isoformat(),
+                "dec_major_patches": dec_patches,
                 "jan_major_patches": jan_patches,
                 "feb_major_patches": feb_patches,
                 "mar_major_patches": mar_patches,
                 "apr_major_patches": apr_patches,
+                "dec_count": len(dec_patches),
                 "jan_count": len(jan_patches),
                 "feb_count": len(feb_patches),
                 "mar_count": len(mar_patches),
@@ -321,12 +320,16 @@ def collect_staggered_groups(
                 apr_group.append(entry)
                 print(f"  → APR group (#{len(apr_group)}): {len(apr_patches)} patches")
                 assigned = True
-            elif not has_any and len(control_group) < games_per_group:
+            elif not has_any and not has_dec and len(control_group) < games_per_group:
+                # Control group: No patches in Dec 2024 - Apr 2025
                 control_group.append(entry)
                 print(f"  → CONTROL group (#{len(control_group)})")
                 assigned = True
             else:
-                print(f"  → Skipped")
+                if has_dec and not has_any:
+                    print(f"  → Skipped (patches only in Dec 2024)")
+                else:
+                    print(f"  → Skipped")
             
             if assigned:
                 print(f"  Progress: Jan={len(jan_group)}, Feb={len(feb_group)}, Mar={len(mar_group)}, Apr={len(apr_group)}, Control={len(control_group)}")
