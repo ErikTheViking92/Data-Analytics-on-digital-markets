@@ -1,0 +1,11 @@
+{
+  "analysis_type": "anticipation_effects_test",
+  "date": "2026-01-30T19:46:40.202380",
+  "pre_treatment_interaction_coef": 0.003753376582348311,
+  "pre_treatment_interaction_pval": 0.8701660151250059,
+  "treatment_w1_to_w2_change": 1.8230358948656544e-05,
+  "control_w1_to_w2_change": -0.00373514622338611,
+  "difference_in_pretrend_changes": 0.0037533765823347665,
+  "anticipation_detected": false,
+  "parallel_trends_holds": true
+}
