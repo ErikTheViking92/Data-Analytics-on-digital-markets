@@ -554,6 +554,302 @@ def run_did_regression(df):
     return model1, model2, model3
 
 
+def plot_event_study_relative_time(df, model_name='staggered'):
+    """
+    Create event study plot showing treatment effects relative to treatment time.
+    Similar to the February 2025 analysis style.
+    """
+    print("\n" + "="*80)
+    print(f"CREATING EVENT STUDY PLOT (RELATIVE TIME) - {model_name.upper()}")
+    print("="*80)
+    
+    # For staggered DiD, we'll create relative time for each treated game
+    df_relative = []
+    
+    for idx, row in df.iterrows():
+        if row['treated'] == 1:
+            # Find when this game was treated based on treatment_group
+            treatment_month = row['treatment_group']
+            if treatment_month == 'jan':
+                treatment_period = 2
+            elif treatment_month == 'feb':
+                treatment_period = 3
+            elif treatment_month == 'mar':
+                treatment_period = 4
+            elif treatment_month == 'apr':
+                treatment_period = 5
+            else:
+                continue
+            
+            relative_time = row['period'] - treatment_period
+            df_relative.append({
+                'relative_time': relative_time,
+                'ln_players': row['ln_players'],
+                'appid': row['appid'],
+                'treated': 1,
+                'post': 1 if relative_time >= 0 else 0
+            })
+    
+    df_rel = pd.DataFrame(df_relative)
+    
+    if len(df_rel) == 0:
+        print("No relative time data available")
+        return None
+    
+    # Run regression with relative time dummies
+    # Create time dummies for relative periods
+    rel_times = sorted(df_rel['relative_time'].unique())
+    
+    # Exclude one period as reference (use -1 as reference)
+    ref_time = -1
+    time_dummies = []
+    for t in rel_times:
+        if t != ref_time:
+            df_rel[f'rel_time_{int(t)}'] = (df_rel['relative_time'] == t).astype(int)
+            time_dummies.append(f'rel_time_{int(t)}')
+    
+    # Run regression
+    formula = f"ln_players ~ {' + '.join(time_dummies)} + C(appid)"
+    
+    try:
+        model = ols(formula, data=df_rel).fit(cov_type='cluster', cov_kwds={'groups': df_rel['appid']})
+        
+        # Extract coefficients
+        coefs = []
+        for t in rel_times:
+            if t == ref_time:
+                coefs.append({
+                    'relative_time': t,
+                    'coef': 0,
+                    'ci_low': 0,
+                    'ci_high': 0,
+                    'is_post': t >= 0
+                })
+            else:
+                var = f'rel_time_{int(t)}'
+                if var in model.params:
+                    ci = model.conf_int().loc[var]
+                    coefs.append({
+                        'relative_time': t,
+                        'coef': model.params[var],
+                        'ci_low': ci[0],
+                        'ci_high': ci[1],
+                        'is_post': t >= 0
+                    })
+        
+        coefs_df = pd.DataFrame(coefs).sort_values('relative_time')
+        
+        # Create plot
+        fig, ax = plt.subplots(figsize=(14, 8))
+        
+        # Separate pre and post
+        pre = coefs_df[coefs_df['is_post'] == False]
+        post = coefs_df[coefs_df['is_post'] == True]
+        
+        # Plot pre-treatment with coral markers
+        ax.errorbar(pre['relative_time'], pre['coef'],
+                    yerr=[pre['coef'] - pre['ci_low'], pre['ci_high'] - pre['coef']],
+                    fmt='o', markersize=10, capsize=6, capthick=2,
+                    color='coral', ecolor='gray', linewidth=2,
+                    label='Pre-Treatment', zorder=3)
+        
+        # Plot post-treatment with blue markers
+        ax.errorbar(post['relative_time'], post['coef'],
+                    yerr=[post['coef'] - post['ci_low'], post['ci_high'] - post['coef']],
+                    fmt='s', markersize=10, capsize=6, capthick=2,
+                    color='steelblue', ecolor='gray', linewidth=2,
+                    label='Post-Treatment', zorder=3)
+        
+        # Add zero line
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=1.5, alpha=0.8, zorder=1)
+        
+        # Add treatment time line
+        ax.axvline(x=-0.5, color='red', linestyle='--', linewidth=2.5, alpha=0.7,
+                  label='Treatment (Feb 15, 2025)', zorder=2)
+        
+        # Shade pre and post regions
+        ax.axvspan(coefs_df['relative_time'].min() - 0.5, -0.5, alpha=0.1, color='yellow',
+                  label='Pre-Treatment Period', zorder=0)
+        ax.axvspan(-0.5, coefs_df['relative_time'].max() + 0.5, alpha=0.1, color='lightblue',
+                  label='Post-Treatment Period', zorder=0)
+        
+        # Formatting
+        ax.set_xlabel('Months Relative to Major Patch Release', fontsize=14, fontweight='bold')
+        ax.set_ylabel('Treatment Effect on Log(Player Count)', fontsize=14, fontweight='bold')
+        ax.set_title(f'Event Study: Effect of Major Patches on Player Counts\n'
+                    f'{model_name.upper()} (Jan-Apr 2025 Treatment Groups)',
+                    fontsize=16, fontweight='bold', pad=20)
+        ax.legend(loc='best', fontsize=11, framealpha=0.95, edgecolor='black')
+        ax.grid(True, alpha=0.3, linestyle=':', linewidth=1)
+        
+        # Set x-axis
+        ax.set_xticks(coefs_df['relative_time'])
+        
+        plt.tight_layout()
+        
+        # Save
+        filename = f'staggered_event_study_relative_{model_name}.png'
+        plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"[OK] Event study (relative time) plot saved to: {filename}")
+        plt.close()
+        
+        return fig, coefs_df
+        
+    except Exception as e:
+        print(f"Error creating relative time event study: {e}")
+        return None, None
+
+
+def plot_event_study_relative_time(df, model_name='staggered'):
+    """
+    Create event study plot showing treatment effects relative to treatment time.
+    Similar to the February 2025 analysis style.
+    """
+    print("\n" + "="*80)
+    print(f"CREATING EVENT STUDY PLOT (RELATIVE TIME) - {model_name.upper()}")
+    print("="*80)
+    
+    # For staggered DiD, we'll create relative time for each treated game
+    df_relative = []
+    
+    for idx, row in df.iterrows():
+        if row['treated'] == 1:
+            # Find when this game was treated based on treatment_group
+            treatment_month = row['treatment_group']
+            if treatment_month == 'jan':
+                treatment_period = 2
+            elif treatment_month == 'feb':
+                treatment_period = 3
+            elif treatment_month == 'mar':
+                treatment_period = 4
+            elif treatment_month == 'apr':
+                treatment_period = 5
+            else:
+                continue
+            
+            relative_time = row['period'] - treatment_period
+            df_relative.append({
+                'relative_time': relative_time,
+                'ln_players': row['ln_players'],
+                'appid': row['appid'],
+                'treated': 1,
+                'post': 1 if relative_time >= 0 else 0
+            })
+    
+    df_rel = pd.DataFrame(df_relative)
+    
+    if len(df_rel) == 0:
+        print("No relative time data available")
+        return None, None
+    
+    # Run regression with relative time dummies
+    # Create time dummies for relative periods
+    rel_times = sorted(df_rel['relative_time'].unique())
+    
+    # Exclude one period as reference (use -1 as reference)
+    ref_time = -1
+    time_dummies = []
+    var_mapping = {}  # Map from relative time to variable name
+    for t in rel_times:
+        if t != ref_time:
+            # Use 't' prefix for time variables to avoid negative sign issues
+            var_name = f'rel_time_t{int(t)}' if t >= 0 else f'rel_time_neg{abs(int(t))}'
+            df_rel[var_name] = (df_rel['relative_time'] == t).astype(int)
+            time_dummies.append(var_name)
+            var_mapping[t] = var_name
+    
+    # Run regression
+    formula = f"ln_players ~ {' + '.join(time_dummies)} + C(appid)"
+    
+    try:
+        model = ols(formula, data=df_rel).fit(cov_type='cluster', cov_kwds={'groups': df_rel['appid']})
+        
+        # Extract coefficients
+        coefs = []
+        for t in rel_times:
+            if t == ref_time:
+                coefs.append({
+                    'relative_time': t,
+                    'coef': 0,
+                    'ci_low': 0,
+                    'ci_high': 0,
+                    'is_post': t >= 0
+                })
+            else:
+                var = var_mapping[t]
+                if var in model.params:
+                    ci = model.conf_int().loc[var]
+                    coefs.append({
+                        'relative_time': t,
+                        'coef': model.params[var],
+                        'ci_low': ci[0],
+                        'ci_high': ci[1],
+                        'is_post': t >= 0
+                    })
+        
+        coefs_df = pd.DataFrame(coefs).sort_values('relative_time')
+        
+        # Create plot
+        fig, ax = plt.subplots(figsize=(14, 8))
+        
+        # Separate pre and post
+        pre = coefs_df[coefs_df['is_post'] == False]
+        post = coefs_df[coefs_df['is_post'] == True]
+        
+        # Plot pre-treatment with coral markers
+        ax.errorbar(pre['relative_time'], pre['coef'],
+                    yerr=[pre['coef'] - pre['ci_low'], pre['ci_high'] - pre['coef']],
+                    fmt='o', markersize=10, capsize=6, capthick=2,
+                    color='coral', ecolor='gray', linewidth=2,
+                    label='Pre-Treatment', zorder=3)
+        
+        # Plot post-treatment with blue markers
+        ax.errorbar(post['relative_time'], post['coef'],
+                    yerr=[post['coef'] - post['ci_low'], post['ci_high'] - post['coef']],
+                    fmt='s', markersize=10, capsize=6, capthick=2,
+                    color='steelblue', ecolor='gray', linewidth=2,
+                    label='Post-Treatment', zorder=3)
+        
+        # Add zero line
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=1.5, alpha=0.8, zorder=1)
+        
+        # Add treatment time line
+        ax.axvline(x=-0.5, color='red', linestyle='--', linewidth=2.5, alpha=0.7,
+                  label='Treatment Time', zorder=2)
+        
+        # Shade pre and post regions
+        ax.axvspan(coefs_df['relative_time'].min() - 0.5, -0.5, alpha=0.1, color='yellow',
+                  label='Pre-Treatment Period', zorder=0)
+        ax.axvspan(-0.5, coefs_df['relative_time'].max() + 0.5, alpha=0.1, color='lightblue',
+                  label='Post-Treatment Period', zorder=0)
+        
+        # Formatting
+        ax.set_xlabel('Months Relative to Major Patch Release', fontsize=14, fontweight='bold')
+        ax.set_ylabel('Treatment Effect on Log(Player Count)', fontsize=14, fontweight='bold')
+        ax.set_title(f'Event Study: Effect of Major Patches on Player Counts\\n'
+                    f'{model_name.upper()} (Jan-Apr 2025 Treatment Groups)',
+                    fontsize=16, fontweight='bold', pad=20)
+        ax.legend(loc='best', fontsize=11, framealpha=0.95, edgecolor='black')
+        ax.grid(True, alpha=0.3, linestyle=':', linewidth=1)
+        
+        # Set x-axis
+        ax.set_xticks(coefs_df['relative_time'])
+        
+        plt.tight_layout()
+        
+        # Save
+        filename = f'staggered_event_study_relative_{model_name}.png'
+        plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"[OK] Event study (relative time) plot saved to: {filename}")
+        plt.close()
+        
+        return fig, coefs_df
+        
+    except Exception as e:
+        print(f"Error creating relative time event study: {e}")
+        return None, None
+
+
 def plot_event_study(df, model3):
     """Create event study plot showing cohort-specific treatment effects over time."""
     print("\n" + "="*80)
@@ -686,13 +982,13 @@ def plot_event_study(df, model3):
     return fig, coefs_df
 
 
-def plot_parallel_trends(df, model2):
+def plot_parallel_trends(df, model, model_name='model2'):
     """
     Plot parallel trends visualization showing treatment vs control groups over time.
     Similar to February 2025 analysis style with 95% confidence intervals.
     """
     print("\n" + "="*80)
-    print("CREATING PARALLEL TRENDS PLOT (WITH 95% CI)")
+    print(f"CREATING PARALLEL TRENDS PLOT (WITH 95% CI) - {model_name.upper()}")
     print("="*80)
     
     # Calculate means and standard errors by period and treatment group
@@ -761,7 +1057,7 @@ def plot_parallel_trends(df, model2):
     plt.tight_layout()
     
     # Save
-    filename = 'staggered_parallel_trends.png'
+    filename = f'staggered_parallel_trends_{model_name}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
     print(f"[OK] Parallel trends plot saved to: {filename}")
     plt.close()
@@ -769,86 +1065,112 @@ def plot_parallel_trends(df, model2):
     return fig
 
 
-def plot_did_effect_lines(df, model2):
+def plot_did_effect_lines(df, model, model_name='model2'):
     """
-    Create DiD effect visualization with parallel lines showing counterfactual.
+    Create DiD effect visualization showing all time periods with counterfactual.
     Shows the DiD effect with a green arrow, similar to February 2025 analysis.
     """
     print("\n" + "="*80)
-    print("CREATING DiD EFFECT PLOT (WITH COUNTERFACTUAL LINES)")
+    print(f"CREATING DiD EFFECT PLOT (WITH COUNTERFACTUAL LINES) - {model_name.upper()}")
     print("="*80)
     
-    # Calculate group means for pre/post periods
-    means = df.groupby(['post', 'treated'])['ln_players'].mean().reset_index()
+    # Calculate means for each period and group
+    period_means = df.groupby(['period', 'treated'])['ln_players'].mean().reset_index()
     
-    # Extract values
-    control_pre = means[(means['treated'] == 0) & (means['post'] == 0)]['ln_players'].values[0]
-    control_post = means[(means['treated'] == 0) & (means['post'] == 1)]['ln_players'].values[0]
-    treatment_pre = means[(means['treated'] == 1) & (means['post'] == 0)]['ln_players'].values[0]
-    treatment_post = means[(means['treated'] == 1) & (means['post'] == 1)]['ln_players'].values[0]
+    # Separate treatment and control
+    control_means = period_means[period_means['treated'] == 0].sort_values('period')
+    treatment_means = period_means[period_means['treated'] == 1].sort_values('period')
     
-    # Calculate DiD effect
-    did_effect = (treatment_post - treatment_pre) - (control_post - control_pre)
-    percent_change = (np.exp(did_effect) - 1) * 100
+    # Get DiD effect from MODEL
+    did_coef_model = model.params.get('did', 0.0)
+    percent_change_model = (np.exp(did_coef_model) - 1) * 100
+    did_pval = model.pvalues.get('did', 1.0)
     
-    # Get p-value from model
-    did_pval = model2.pvalues.get('did', 1.0)
+    # Calculate counterfactual: what treatment would have been without the patch
+    # Counterfactual = actual treatment - model's DiD effect (in log scale)
+    treatment_means_copy = treatment_means.copy()
+    treatment_means_copy['ln_players_counterfactual'] = treatment_means_copy['ln_players'] - did_coef_model
+    
+    # Time labels
+    month_labels = ['Dec 2024', 'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025']
+    periods = range(1, 6)
+    
+    # Time labels
+    month_labels = ['Dec 2024', 'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025']
+    periods = range(1, 6)
     
     # Create plot
-    fig, ax = plt.subplots(figsize=(12, 8))
+    fig, ax = plt.subplots(figsize=(14, 8))
     
-    # Plot control group
-    ax.plot([0, 1], [control_pre, control_post], 'o-',
-            color='coral', linewidth=4, markersize=14,
+    # Plot control group across all periods
+    ax.plot(control_means['period'], control_means['ln_players'], 'o-',
+            color='coral', linewidth=3, markersize=12,
             label='Control Group', zorder=3)
     
-    # Plot treatment group
-    ax.plot([0, 1], [treatment_pre, treatment_post], 's-',
-            color='steelblue', linewidth=4, markersize=14,
-            label='Treatment Group', zorder=3)
+    # Plot treatment group (actual) across all periods
+    ax.plot(treatment_means['period'], treatment_means['ln_players'], 's-',
+            color='steelblue', linewidth=3, markersize=12,
+            label='Treatment Group (Actual)', zorder=3)
     
     # Plot counterfactual (what treatment would have been without patches)
-    counterfactual_post = treatment_pre + (control_post - control_pre)
-    ax.plot([0, 1], [treatment_pre, counterfactual_post], 's--',
+    ax.plot(treatment_means_copy['period'], treatment_means_copy['ln_players_counterfactual'], 's--',
             color='steelblue', linewidth=2.5, markersize=10, alpha=0.5,
             label='Counterfactual (No Patch)', zorder=2)
     
-    # Highlight DiD effect with arrow
-    if abs(did_effect) > 0.01:  # Only show arrow if effect is visible
-        ax.annotate('', xy=(1, treatment_post), xytext=(1, counterfactual_post),
+    # Add shaded region showing DiD effect visually
+    # Fill between actual and counterfactual for post-treatment periods (period 2-5, averaging)
+    if abs(did_coef_model) > 0.001:
+        post_periods = treatment_means_copy[treatment_means_copy['period'] >= 2]['period']
+        actual_post = treatment_means[treatment_means['period'] >= 2]['ln_players']
+        counterfactual_post_vals = treatment_means_copy[treatment_means_copy['period'] >= 2]['ln_players_counterfactual']
+        
+        ax.fill_between(post_periods, actual_post, counterfactual_post_vals,
+                        alpha=0.2, color='green', label='DiD Effect Region')
+    
+    # Add arrow showing DiD effect at the last period
+    last_period = 5
+    treatment_last = treatment_means[treatment_means['period'] == last_period]['ln_players'].values[0]
+    counterfactual_last = treatment_means_copy[treatment_means_copy['period'] == last_period]['ln_players_counterfactual'].values[0]
+    
+    if abs(did_coef_model) > 0.01:  # Only show arrow if effect is visible
+        ax.annotate('', xy=(last_period, treatment_last), xytext=(last_period, counterfactual_last),
                     arrowprops=dict(arrowstyle='<->', color='green', lw=3))
-        ax.text(1.08, (treatment_post + counterfactual_post) / 2,
-                f'DiD Effect:\n{percent_change:+.2f}%',
-                fontsize=12, fontweight='bold', color='green',
+        # Position text to the right of arrow
+        mid_point = (treatment_last + counterfactual_last) / 2
+        ax.text(last_period + 0.15, mid_point,
+                f'DiD Effect:\n{percent_change_model:+.2f}%',
+                fontsize=11, fontweight='bold', color='green',
                 verticalalignment='center')
-    else:
-        # If effect is very small, just show text annotation
-        mid_y = (max(treatment_post, control_post) + min(treatment_pre, control_pre)) / 2
-        ax.text(0.5, mid_y,
-                f'DiD Effect: {percent_change:+.2f}%\n(Not statistically significant)',
-                fontsize=13, fontweight='bold', color='gray',
-                ha='center', va='center',
-                bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.8, edgecolor='black'))
+    
+    # Add vertical line indicating average treatment timing
+    ax.axvline(x=2.5, color='red', linestyle='--', linewidth=2, alpha=0.5,
+              label='Avg Treatment Start', zorder=1)
+    
+    # Add vertical line indicating average treatment timing
+    ax.axvline(x=2.5, color='red', linestyle='--', linewidth=2, alpha=0.5,
+              label='Avg Treatment Start', zorder=1)
     
     # Formatting
-    ax.set_xlabel('Period', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Time Period', fontsize=14, fontweight='bold')
     ax.set_ylabel('Log(Player Count)', fontsize=14, fontweight='bold')
     ax.set_title('Difference-in-Differences: Effect of Major Patches on Player Counts\n' +
-                'Staggered DiD Analysis (Dec 2024 - Apr 2025)',
+                f'Staggered DiD Analysis - {model_name.upper()}',
                 fontsize=16, fontweight='bold', pad=20)
-    ax.set_xticks([0, 1])
-    ax.set_xticklabels(['Pre-Treatment\n(Before Patches)', 
-                        'Post-Treatment\n(After Patches)'],
-                       fontsize=12)
-    ax.legend(loc='best', fontsize=12, framealpha=0.95, edgecolor='black')
-    ax.grid(True, alpha=0.3, linestyle=':')
     
-    # Add interpretation note
+    # Set x-axis to show all 5 time periods
+    ax.set_xlim(0.7, 5.3)
+    ax.set_xticks(periods)
+    ax.set_xticklabels(month_labels, fontsize=11)
+    
+    ax.legend(loc='best', fontsize=11, framealpha=0.95, edgecolor='black')
+    ax.grid(True, alpha=0.3, linestyle=':', linewidth=1)
+    
+    # Add interpretation note using MODEL estimate
     if did_pval < 0.05:
-        interpretation = f"DiD Estimate: {percent_change:+.2f}% (p={did_pval:.4f}, significant)"
+        interpretation = f"DiD Estimate: {percent_change_model:+.2f}% (p={did_pval:.4f}, significant)"
         note_color = 'lightgreen'
     else:
-        interpretation = f"DiD Estimate: {percent_change:+.2f}% (p={did_pval:.4f}, not significant)"
+        interpretation = f"DiD Estimate: {percent_change_model:+.2f}% (p={did_pval:.4f}, not significant)"
         note_color = 'lightyellow'
     
     ax.text(0.5, 0.02, interpretation,
@@ -858,7 +1180,7 @@ def plot_did_effect_lines(df, model2):
     plt.tight_layout()
     
     # Save
-    filename = 'staggered_did_effect_lines.png'
+    filename = f'staggered_did_effect_lines_{model_name}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
     print(f"[OK] DiD effect (lines) plot saved to: {filename}")
     plt.close()
@@ -968,15 +1290,28 @@ def main():
     print("CREATING VISUALIZATIONS")
     print("="*80)
     
-    # February-style visualizations (parallel trends + DiD effect with counterfactual)
-    parallel_fig = plot_parallel_trends(df, model2)
-    did_lines_fig = plot_did_effect_lines(df, model2)
+    # February-style visualizations for Model 1 (Pooled OLS)
+    print("\n" + "-"*80)
+    print("MODEL 1 VISUALIZATIONS (Pooled OLS)")
+    print("-"*80)
+    parallel_fig_m1 = plot_parallel_trends(df, model1, model_name='model1')
+    did_lines_fig_m1 = plot_did_effect_lines(df, model1, model_name='model1')
+    
+    # February-style visualizations for Model 2 (With Game FE)
+    print("\n" + "-"*80)
+    print("MODEL 2 VISUALIZATIONS (With Game FE)")
+    print("-"*80)
+    parallel_fig_m2 = plot_parallel_trends(df, model2, model_name='model2')
+    did_lines_fig_m2 = plot_did_effect_lines(df, model2, model_name='model2')
     
     # Simple coefficient plot
     did_fig = plot_did_effect(model2)
     
-    # Event study plot
+    # Event study plot (cohort-specific)
     event_fig, coefs_df = plot_event_study(df, model3)
+    
+    # Event study plot (relative time)
+    event_rel_fig, event_rel_coefs = plot_event_study_relative_time(df, model_name='staggered')
     
     print("\n" + "="*80)
     print("ANALYSIS COMPLETE!")
@@ -984,10 +1319,15 @@ def main():
     print("\nFiles created:")
     print("  1. staggered_panel_2025.csv - Panel dataset (google.csv style)")
     print("  2. staggered_did_results.json - Regression results summary")
-    print("  3. staggered_parallel_trends.png - Parallel trends with 95% CI")
-    print("  4. staggered_did_effect_lines.png - DiD effect with counterfactual lines")
-    print("  5. staggered_did_effect_plot.png - Simple DiD coefficient plot")
-    print("  6. staggered_did_event_study.png - Event study visualization")
+    print("\n  Model 1 Visualizations (Pooled OLS):")
+    print("  3. staggered_parallel_trends_model1.png - Parallel trends with 95% CI")
+    print("  4. staggered_did_effect_lines_model1.png - DiD effect with counterfactual")
+    print("\n  Model 2 Visualizations (With Game FE):")
+    print("  5. staggered_parallel_trends_model2.png - Parallel trends with 95% CI")
+    print("  6. staggered_did_effect_lines_model2.png - DiD effect with counterfactual")
+    print("  7. staggered_did_effect_plot.png - Simple DiD coefficient plot")
+    print("  8. staggered_did_event_study.png - Cohort-specific event study")
+    print("  9. staggered_event_study_relative_staggered.png - Event study (relative time)")
     print("="*80)
 
 
