@@ -84,11 +84,9 @@ def fetch_current_players(appid: int) -> Optional[int]:
 
 
 def fetch_game_metadata(appid: int, store_scraper) -> Dict:
-    """
-    Fetch game metadata including genre, release date, price, and review score.
-    """
+    """Fetch game metadata for control variables."""
     metadata = {
-        'genre_category': 'Other',
+        'genre_category': 'other',  # Default
         'age_years': None,
         'price_usd': None,
         'is_free': 0,
@@ -96,29 +94,24 @@ def fetch_game_metadata(appid: int, store_scraper) -> Dict:
     }
     
     try:
-        # Get store data
-        store_data = store_scraper.scrape_game(appid)
+        # Fetch store data (same method as staggered analysis)
+        store_data = store_scraper.fetch_app(appid)
         
         if store_data:
-            # Genre
+            # Genre categorization (same logic as staggered analysis)
             genres = store_data.get('genres', [])
-            if genres:
-                main_genre = genres[0]
-                # Categorize into main categories
-                if main_genre in ['Action', 'Adventure', 'Shooter', 'Fighting']:
-                    metadata['genre_category'] = 'Action'
-                elif main_genre in ['RPG', 'JRPG']:
-                    metadata['genre_category'] = 'RPG'
-                elif main_genre in ['Strategy', 'Simulation']:
-                    metadata['genre_category'] = 'Strategy'
-                elif main_genre in ['Sports', 'Racing']:
-                    metadata['genre_category'] = 'Sports'
-                elif main_genre in ['Puzzle', 'Casual', 'Indie']:
-                    metadata['genre_category'] = 'Casual'
-                else:
-                    metadata['genre_category'] = main_genre
+            genre_str = ' '.join(genres).lower() if genres else ''
             
-            # Release date (age of game)
+            if any(g in genre_str for g in ['mmo', 'massively multiplayer']):
+                metadata['genre_category'] = 'mmo'
+            elif any(g in genre_str for g in ['multiplayer', 'competitive', 'pvp', 'online']):
+                metadata['genre_category'] = 'multiplayer'
+            elif any(g in genre_str for g in ['single-player', 'singleplayer', 'story']):
+                metadata['genre_category'] = 'singleplayer'
+            else:
+                metadata['genre_category'] = 'other'
+            
+            # Release date (calculate age in years)
             release_date_str = store_data.get('release_date')
             if release_date_str:
                 try:
@@ -126,31 +119,32 @@ def fetch_game_metadata(appid: int, store_scraper) -> Dict:
                     age_days = (datetime.now() - release_date).days
                     metadata['age_years'] = age_days / 365.25
                 except:
-                    pass
+                    metadata['age_years'] = None
             
-            # Price
-            price_info = store_data.get('price')
-            if price_info:
-                if price_info.get('is_free', False):
-                    metadata['is_free'] = 1
-                    metadata['price_usd'] = 0.0
-                else:
-                    final_price = price_info.get('final', 0)
-                    metadata['price_usd'] = final_price / 100.0  # Convert cents to dollars
+            # Price (same logic as staggered analysis)
+            price_overview = store_data.get('price_overview')
+            if price_overview:
+                # Price is in cents
+                metadata['price_usd'] = price_overview.get('final', 0) / 100.0
+                metadata['is_free'] = 0
+            else:
+                # Check if game is free
+                metadata['price_usd'] = 0.0
+                metadata['is_free'] = 1
         
-        # Get review score
-        reviews = fetch_app_reviews(appid)
-        if reviews and 'summary' in reviews:
-            summary = reviews['summary']
-            total = summary.get('total_reviews', 0)
-            positive = summary.get('total_positive', 0)
-            
-            if total > 0:
-                # Convert to 0-10 scale (percentage positive * 10)
-                metadata['review_score'] = (positive / total) * 10
+        # Fetch review score (same logic as staggered analysis)
+        try:
+            review_data = fetch_app_reviews(appid)
+            if review_data:
+                # Use review score (0-10 scale based on percentage)
+                pct = review_data.get('percent_positive')
+                if pct is not None:
+                    metadata['review_score'] = pct / 10.0  # Convert to 0-10 scale
+        except:
+            metadata['review_score'] = None
     
     except Exception as e:
-        pass
+        print(f"  [metadata] Error fetching metadata for {appid}: {e}")
     
     return metadata
 
@@ -206,14 +200,13 @@ def create_panel_dataset(treatment_games: List[Dict], control_games: List[Dict])
     - treated: 1 if treatment group, 0 if control
     - players: Player count (we'll use proxy data)
     - ln_players: Log of player count
-    - Control variables: genre, age, price, free-to-play, review score
     """
     print("\nCreating panel dataset...")
     
+    rows = []
+    
     # Initialize store scraper for metadata
     store_scraper = SteamStoreScraper()
-    
-    rows = []
     
     # Process treatment group
     print("  Processing treatment group...")
@@ -225,7 +218,7 @@ def create_panel_dataset(treatment_games: List[Dict], control_games: List[Dict])
             print(f"    Progress: {i}/100")
             time.sleep(1)  # Rate limiting
         
-        # Fetch metadata
+        # Fetch metadata once per game
         metadata = fetch_game_metadata(appid, store_scraper)
         
         # Collect player data
@@ -257,7 +250,7 @@ def create_panel_dataset(treatment_games: List[Dict], control_games: List[Dict])
                 "treated": 1,
                 "players": players,
                 "ln_players": np.log(players + 1),  # Add 1 to avoid log(0)
-                # Control variables
+                # Control variables (constant across time for each game)
                 "genre_category": metadata['genre_category'],
                 "age_years": metadata['age_years'] if metadata['age_years'] is not None else np.nan,
                 "price_usd": metadata['price_usd'] if metadata['price_usd'] is not None else np.nan,
@@ -275,7 +268,7 @@ def create_panel_dataset(treatment_games: List[Dict], control_games: List[Dict])
             print(f"    Progress: {i}/100")
             time.sleep(1)  # Rate limiting
         
-        # Fetch metadata
+        # Fetch metadata once per game
         metadata = fetch_game_metadata(appid, store_scraper)
         
         # Collect player data
@@ -303,7 +296,7 @@ def create_panel_dataset(treatment_games: List[Dict], control_games: List[Dict])
                 "treated": 0,
                 "players": players,
                 "ln_players": np.log(players + 1),
-                # Control variables
+                # Control variables (constant across time for each game)
                 "genre_category": metadata['genre_category'],
                 "age_years": metadata['age_years'] if metadata['age_years'] is not None else np.nan,
                 "price_usd": metadata['price_usd'] if metadata['price_usd'] is not None else np.nan,
@@ -312,164 +305,97 @@ def create_panel_dataset(treatment_games: List[Dict], control_games: List[Dict])
             })
     
     df = pd.DataFrame(rows)
-    
-    # Fill missing values for control variables
-    print(f"\nFilling missing values for control variables...")
-    if df['review_score'].isna().all():
-        print(f"  All review scores missing, filling with default (7.0)")
-        df['review_score'] = 7.0
-    elif df['review_score'].isna().any():
-        median_score = df['review_score'].median()
-        print(f"  Filling {df['review_score'].isna().sum()} missing review scores with median ({median_score:.2f})")
-        df['review_score'].fillna(median_score, inplace=True)
-    
-    if df['age_years'].isna().any():
-        median_age = df['age_years'].median()
-        print(f"  Filling {df['age_years'].isna().sum()} missing age values with median ({median_age:.2f} years)")
-        df['age_years'].fillna(median_age, inplace=True)
-    
-    if df['price_usd'].isna().any():
-        median_price = df['price_usd'].median()
-        print(f"  Filling {df['price_usd'].isna().sum()} missing price values with median (${median_price:.2f})")
-        df['price_usd'].fillna(median_price, inplace=True)
-    
     print(f"\nPanel dataset created: {len(df)} observations from {df['appid'].nunique()} games")
     
     return df
 
 
 def run_did_analysis(df: pd.DataFrame):
-    """Run the main DiD regression analysis with three model specifications."""
+    """Run the main DiD regression analysis."""
     
     print("\n" + "="*80)
     print("DIFFERENCE-IN-DIFFERENCES REGRESSION ANALYSIS")
     print("="*80)
     
-    # Model 1: Pooled OLS with control variables (like staggered analysis)
+    # Fill missing control variables with medians/defaults
+    print("\nFilling missing values for control variables...")
+    
+    # Fill review scores with default if all missing
+    review_na_count = df['review_score'].isna().sum()
+    if review_na_count == len(df):
+        print(f"  All review scores missing, filling with default (7.0)")
+        df['review_score'] = 7.0
+    elif review_na_count > 0:
+        median_review = df['review_score'].median()
+        print(f"  Filling {review_na_count} missing review scores with median ({median_review:.1f})")
+        df.loc[df['review_score'].isna(), 'review_score'] = median_review
+    
+    # Fill age with median
+    age_na_count = df['age_years'].isna().sum()
+    if age_na_count > 0:
+        median_age = df['age_years'].median()
+        if pd.isna(median_age):
+            # If all ages are missing, use a reasonable default (5 years)
+            median_age = 5.0
+        print(f"  Filling {age_na_count} missing age values with median ({median_age:.1f} years)")
+        df.loc[df['age_years'].isna(), 'age_years'] = median_age
+    
+    # Fill price with median
+    price_na_count = df['price_usd'].isna().sum()
+    if price_na_count > 0:
+        median_price = df['price_usd'].median()
+        if pd.isna(median_price):
+            # If all prices are missing, use 0 (free)
+            median_price = 0.0
+        print(f"  Filling {price_na_count} missing price values with median (${median_price:.2f})")
+        df.loc[df['price_usd'].isna(), 'price_usd'] = median_price
+    
+    # Model 1: Pooled OLS with Control Variables
     print("\nModel 1: Pooled OLS with Control Variables")
     print("-" * 80)
-    formula1 = "ln_players ~ treated + post + treated:post + C(genre_category) + age_years + price_usd + is_free + review_score"
+    
+    # Control variables (same as staggered analysis)
+    control_vars = [
+        'C(genre_category)',  # Genre (categorical: mmo, multiplayer, singleplayer, other)
+        'age_years',          # Game age in years
+        'price_usd',          # Current price in USD
+        'is_free',            # Free-to-play indicator
+        'review_score'        # Steam review score (0-10)
+    ]
+    
+    formula1 = f"ln_players ~ treated + post + treated:post + {' + '.join(control_vars)}"
     model1 = ols(formula1, data=df).fit(cov_type='cluster', cov_kwds={'groups': df['appid']})
     
-    # Print key coefficients only
-    print(f"\nKey Coefficients:")
-    print(f"{'Variable':<30} {'Coefficient':>12} {'Std Error':>12} {'P-value':>10} {'Sig':>5}")
-    print("-" * 70)
+    # Extract key coefficients
+    did_coef_1 = model1.params.get('treated:post', 0.0)
+    did_pval_1 = model1.pvalues.get('treated:post', 1.0)
+    percent_change_1 = (np.exp(did_coef_1) - 1) * 100
     
-    key_vars = ['treated', 'post', 'treated:post', 'age_years', 'price_usd', 'is_free', 'review_score']
-    for var in key_vars:
-        if var in model1.params:
-            coef = model1.params[var]
-            se = model1.bse[var]
-            pval = model1.pvalues[var]
-            sig = '***' if pval < 0.01 else '**' if pval < 0.05 else '*' if pval < 0.1 else ''
-            print(f"{var:<30} {coef:>12.4f} {se:>12.4f} {pval:>10.4f} {sig:>5}")
+    print(f"\nKey Results:")
+    print(f"  DiD Coefficient: {did_coef_1:.4f} (p={did_pval_1:.4f})")
+    print(f"  Effect Size: {percent_change_1:+.2f}%")
+    print(f"  Significant: {'Yes' if did_pval_1 < 0.05 else 'No'} (α = 0.05)")
     
-    print(f"\nModel Statistics:")
-    print(f"  N observations: {model1.nobs:.0f}")
-    print(f"  R-squared: {model1.rsquared:.4f}")
-    print(f"  Cluster-robust standard errors (clustered by game)")
-    
-    # Model 2: Two-way fixed effects (game FE + time FE) - like staggered preferred model
-    print("\n" + "="*80)
-    print("\nModel 2: Two-Way Fixed Effects (Game FE + Time FE) - PREFERRED MODEL")
+    # Model 2: Two-Way Fixed Effects (Game FE + Time FE) - PREFERRED MODEL
+    print("\nModel 2: Two-Way Fixed Effects (Game FE + Time FE)")
     print("-" * 80)
     formula2 = "ln_players ~ treated:post + C(appid) + C(week)"
     model2 = ols(formula2, data=df).fit(cov_type='cluster', cov_kwds={'groups': df['appid']})
     
-    # Print only DiD coefficient and time FE
-    print(f"\nDiD Coefficient (Treatment Effect):")
-    print(f"{'Variable':<30} {'Coefficient':>12} {'Std Error':>12} {'P-value':>10} {'Sig':>5}")
-    print("-" * 70)
-    
-    if 'treated:post' in model2.params:
-        coef = model2.params['treated:post']
-        se = model2.bse['treated:post']
-        pval = model2.pvalues['treated:post']
-        sig = '***' if pval < 0.01 else '**' if pval < 0.05 else '*' if pval < 0.1 else ''
-        print(f"{'treated:post':<30} {coef:>12.4f} {se:>12.4f} {pval:>10.4f} {sig:>5}")
-    
-    print(f"\nTime Fixed Effects:")
-    print(f"{'Variable':<30} {'Coefficient':>12} {'Std Error':>12} {'P-value':>10} {'Sig':>5}")
-    print("-" * 70)
-    time_fe_vars = [v for v in model2.params.index if v.startswith('C(week)')]
-    for var in time_fe_vars:
-        coef = model2.params[var]
-        se = model2.bse[var]
-        pval = model2.pvalues[var]
-        sig = '***' if pval < 0.01 else '**' if pval < 0.05 else '*' if pval < 0.1 else ''
-        print(f"{var:<30} {coef:>12.4f} {se:>12.4f} {pval:>10.4f} {sig:>5}")
-    
-    print(f"\n  [Game Fixed Effects: {df['appid'].nunique()} games included but not displayed]")
-    print(f"\nModel Statistics:")
-    print(f"  N observations: {model2.nobs:.0f}")
-    print(f"  R-squared: {model2.rsquared:.4f}")
-    print(f"  Cluster-robust standard errors (clustered by game)")
-    print(f"\nNote: Time fixed effects control for global shocks affecting all games")
-    print(f"      (e.g., Steam sales, holidays, platform-wide events)")
-    
-    # Model 3: Event study style (treated × week interactions)
-    print("\n" + "="*80)
-    print("\nModel 3: Event Study (Week-by-Week Treatment Effects)")
-    print("-" * 80)
-    formula3 = "ln_players ~ treated:C(week) + C(appid)"
-    model3 = ols(formula3, data=df).fit(cov_type='cluster', cov_kwds={'groups': df['appid']})
-    
-    print(f"\nWeek-Specific Treatment Effects:")
-    print(f"{'Variable':<30} {'Coefficient':>12} {'Std Error':>12} {'P-value':>10} {'Sig':>5}")
-    print("-" * 70)
-    
-    for week in range(1, 5):
-        var = f'treated:C(week)[T.{week}]'
-        if var in model3.params:
-            coef = model3.params[var]
-            se = model3.bse[var]
-            pval = model3.pvalues[var]
-            sig = '***' if pval < 0.01 else '**' if pval < 0.05 else '*' if pval < 0.1 else ''
-            period = 'Pre' if week <= 2 else 'Post'
-            print(f"Week {week} ({period}){'':<20} {coef:>12.4f} {se:>12.4f} {pval:>10.4f} {sig:>5}")
-    
-    print(f"\n  [Game Fixed Effects: {df['appid'].nunique()} games included but not displayed]")
-    print(f"\nModel Statistics:")
-    print(f"  N observations: {model3.nobs:.0f}")
-    print(f"  R-squared: {model3.rsquared:.4f}")
-    print(f"  Cluster-robust standard errors (clustered by game)")
-    
-    # Extract DiD coefficients from Models 1 and 2
-    did_coef_1 = model1.params.get('treated:post', np.nan)
-    did_se_1 = model1.bse.get('treated:post', np.nan)
-    did_pval_1 = model1.pvalues.get('treated:post', np.nan)
-    
-    did_coef_2 = model2.params.get('treated:post', np.nan)
-    did_se_2 = model2.bse.get('treated:post', np.nan)
-    did_pval_2 = model2.pvalues.get('treated:post', np.nan)
-    
-    print("\n" + "="*80)
-    print("KEY RESULTS SUMMARY")
-    print("="*80)
-    
-    print(f"\nModel 1 (Pooled OLS with Controls) - Average Treatment Effect:")
-    print(f"  Coefficient: {did_coef_1:.4f}")
-    print(f"  Std. Error:  {did_se_1:.4f}")
-    print(f"  P-value:     {did_pval_1:.4f}")
-    print(f"  95% CI:      [{model1.conf_int().loc['treated:post', 0]:.4f}, {model1.conf_int().loc['treated:post', 1]:.4f}]")
-    print(f"  Significant: {'Yes ***' if did_pval_1 < 0.01 else 'Yes **' if did_pval_1 < 0.05 else 'Yes *' if did_pval_1 < 0.1 else 'No'}")
-    percent_change_1 = (np.exp(did_coef_1) - 1) * 100
-    print(f"  Interpretation: {percent_change_1:.2f}% change in player counts")
-    
-    print(f"\nModel 2 (Two-Way FE) - Average Treatment Effect:")
-    print(f"  Coefficient: {did_coef_2:.4f}")
-    print(f"  Std. Error:  {did_se_2:.4f}")
-    print(f"  P-value:     {did_pval_2:.4f}")
-    print(f"  95% CI:      [{model2.conf_int().loc['treated:post', 0]:.4f}, {model2.conf_int().loc['treated:post', 1]:.4f}]")
-    print(f"  Significant: {'Yes ***' if did_pval_2 < 0.01 else 'Yes **' if did_pval_2 < 0.05 else 'Yes *' if did_pval_2 < 0.1 else 'No'}")
+    # Extract key coefficients
+    did_coef_2 = model2.params.get('treated:post', 0.0)
+    did_pval_2 = model2.pvalues.get('treated:post', 1.0)
     percent_change_2 = (np.exp(did_coef_2) - 1) * 100
-    print(f"  Interpretation: {percent_change_2:.2f}% change in player counts")
     
-    print(f"\n** PREFERRED MODEL: Model 2 (Two-Way FE) controls for game and time fixed effects **")
+    print(f"\nKey Results:")
+    print(f"  DiD Coefficient: {did_coef_2:.4f} (p={did_pval_2:.4f})")
+    print(f"  Effect Size: {percent_change_2:+.2f}%")
+    print(f"  Significant: {'Yes' if did_pval_2 < 0.05 else 'No'} (α = 0.05)")
+    print("\nNote: Model 2 with two-way fixed effects is the preferred specification.")
+    print("It controls for time-invariant game characteristics and common time shocks.")
     print("="*80)
     
-    return model1, model2, model3
+    return model1, model2
 
 
 def test_parallel_trends(df: pd.DataFrame):
@@ -612,6 +538,10 @@ def plot_did_effect(df: pd.DataFrame, model, save_path: str = "february_2025_did
             color='steelblue', linewidth=2, markersize=8, alpha=0.5,
             label='Counterfactual (No Patch)')
     
+    # Add vertical line at treatment time
+    ax.axvline(x=0.5, color='red', linestyle='--', linewidth=2.5, alpha=0.7,
+              label='Treatment Time (Feb 15)', zorder=1)
+    
     # Highlight DiD effect with arrow if visible
     if abs(did_coef_model) > 0.01:
         ax.annotate('', xy=(1, treatment_post), xytext=(1, counterfactual_post),
@@ -691,39 +621,45 @@ def main():
     print("\nBy Time Period:")
     print(df.groupby('post')['ln_players'].describe())
     
-    # Step 4: Run DiD regression
-    model1, model2, model3 = run_did_analysis(df)
+    # Step 4: Run DiD regression (returns two models)
+    model1, model2 = run_did_analysis(df)
     
-    # Step 5: Test parallel trends
-    trends_model = test_parallel_trends(df)
-    
-    # Step 6: Visualizations
+    # Step 5: Visualizations
     print("\n" + "="*80)
     print("CREATING VISUALIZATIONS")
     print("="*80)
     
-    # Create plots for Model 1 (with controls)
-    print("\nModel 1 Visualizations (Pooled OLS with Controls):")
-    plot_parallel_trends(df, save_path='february_2025_parallel_trends_model1.png')
-    plot_did_effect(df, model1, save_path='february_2025_did_effect_model1.png')
+    # Model 1 plots (Pooled OLS with Controls)
+    print("\nModel 1 (Pooled OLS with Controls):")
+    plot_parallel_trends(df, save_path="february_2025_parallel_trends_model1.png")
+    plot_did_effect(df, model1, save_path="february_2025_did_effect_model1.png")
     
-    # Create plots for Model 2 (two-way FE - preferred)
-    print("\nModel 2 Visualizations (Two-Way Fixed Effects - PREFERRED):")
-    plot_parallel_trends(df, save_path='february_2025_parallel_trends_model2.png')
-    plot_did_effect(df, model2, save_path='february_2025_did_effect_model2.png')
+    # Model 2 plots (Two-Way Fixed Effects - PREFERRED)
+    print("\nModel 2 (Two-Way Fixed Effects - PREFERRED):")
+    plot_parallel_trends(df, save_path="february_2025_parallel_trends_model2.png")
+    plot_did_effect(df, model2, save_path="february_2025_did_effect_model2.png")
     
-    # Step 7: Save results summary
+    # Step 6: Save results summary
     results_summary = {
         "analysis_date": datetime.now().isoformat(),
         "treatment_date": TREATMENT_DATE.isoformat(),
         "n_treatment_games": df[df['treated'] == 1]['appid'].nunique(),
         "n_control_games": df[df['treated'] == 0]['appid'].nunique(),
         "total_observations": len(df),
-        "did_coefficient": float(model1.params.get('treated:post', np.nan)),
-        "did_std_error": float(model1.bse.get('treated:post', np.nan)),
-        "did_pvalue": float(model1.pvalues.get('treated:post', np.nan)),
-        "r_squared": float(model1.rsquared),
-        "interpretation": f"Major patches are associated with a {(np.exp(model1.params.get('treated:post', 0)) - 1) * 100:.2f}% change in player counts"
+        "model1_pooled_ols": {
+            "did_coefficient": float(model1.params.get('treated:post', np.nan)),
+            "did_std_error": float(model1.bse.get('treated:post', np.nan)),
+            "did_pvalue": float(model1.pvalues.get('treated:post', np.nan)),
+            "r_squared": float(model1.rsquared),
+            "percent_change": float((np.exp(model1.params.get('treated:post', 0)) - 1) * 100)
+        },
+        "model2_twoway_fe": {
+            "did_coefficient": float(model2.params.get('treated:post', np.nan)),
+            "did_std_error": float(model2.bse.get('treated:post', np.nan)),
+            "did_pvalue": float(model2.pvalues.get('treated:post', np.nan)),
+            "r_squared": float(model2.rsquared),
+            "percent_change": float((np.exp(model2.params.get('treated:post', 0)) - 1) * 100)
+        }
     }
     
     with open("february_2025_did_results.json", "w", encoding="utf-8") as f:
@@ -733,6 +669,14 @@ def main():
     
     print("\n" + "="*80)
     print("ANALYSIS COMPLETE!")
+    print("="*80)
+    print("\nGenerated files:")
+    print("  - february_2025_panel_data.csv")
+    print("  - february_2025_parallel_trends_model1.png")
+    print("  - february_2025_did_effect_model1.png")
+    print("  - february_2025_parallel_trends_model2.png")
+    print("  - february_2025_did_effect_model2.png")
+    print("  - february_2025_did_results.json")
     print("="*80)
 
 

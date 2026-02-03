@@ -36,11 +36,11 @@ def fetch_current_players(appid: int):
 def fetch_game_metadata(appid: int, store_scraper: SteamStoreScraper):
     """Fetch game metadata for control variables."""
     metadata = {
-        'genre_category': 'other',  # Default
-        'age_years': None,
-        'price_usd': None,
+        'genre_category': 'Other',  # Default
+        'age_years': 2.0,  # Default
+        'price_usd': 20.0,  # Default
         'is_free': 0,
-        'review_score': None
+        'review_score': 5.0  # Default (neutral)
     }
     
     try:
@@ -48,18 +48,24 @@ def fetch_game_metadata(appid: int, store_scraper: SteamStoreScraper):
         store_data = store_scraper.fetch_app(appid)
         
         if store_data:
-            # Genre categorization
+            # Genre categorization (more specific)
             genres = store_data.get('genres', [])
             genre_str = ' '.join(genres).lower() if genres else ''
             
-            if any(g in genre_str for g in ['mmo', 'massively multiplayer']):
-                metadata['genre_category'] = 'mmo'
-            elif any(g in genre_str for g in ['multiplayer', 'competitive', 'pvp', 'online']):
-                metadata['genre_category'] = 'multiplayer'
-            elif any(g in genre_str for g in ['single-player', 'singleplayer', 'story']):
-                metadata['genre_category'] = 'singleplayer'
+            if any(g in genre_str for g in ['action']):
+                metadata['genre_category'] = 'Action'
+            elif any(g in genre_str for g in ['adventure']):
+                metadata['genre_category'] = 'Adventure'
+            elif any(g in genre_str for g in ['rpg', 'role-playing']):
+                metadata['genre_category'] = 'RPG'
+            elif any(g in genre_str for g in ['strategy']):
+                metadata['genre_category'] = 'Strategy'
+            elif any(g in genre_str for g in ['simulation']):
+                metadata['genre_category'] = 'Simulation'
+            elif any(g in genre_str for g in ['sports', 'racing']):
+                metadata['genre_category'] = 'Sports'
             else:
-                metadata['genre_category'] = 'other'
+                metadata['genre_category'] = 'Other'
             
             # Release date (calculate age in years)
             release_date_str = store_data.get('release_date')
@@ -67,9 +73,9 @@ def fetch_game_metadata(appid: int, store_scraper: SteamStoreScraper):
                 try:
                     release_date = date_parser.parse(release_date_str)
                     age_days = (datetime.now() - release_date).days
-                    metadata['age_years'] = age_days / 365.25
+                    metadata['age_years'] = max(0, age_days / 365.25)
                 except:
-                    metadata['age_years'] = None
+                    pass
             
             # Price
             price_overview = store_data.get('price_overview')
@@ -77,24 +83,23 @@ def fetch_game_metadata(appid: int, store_scraper: SteamStoreScraper):
                 # Price is in cents
                 metadata['price_usd'] = price_overview.get('final', 0) / 100.0
                 metadata['is_free'] = 0
-            else:
-                # Check if game is free
+            elif store_data.get('is_free', False):
                 metadata['price_usd'] = 0.0
                 metadata['is_free'] = 1
         
         # Fetch review score
         try:
             review_data = fetch_app_reviews(appid)
-            if review_data:
-                # Use review score (0-10 scale based on percentage)
-                pct = review_data.get('percent_positive')
-                if pct is not None:
+            if review_data and 'percent_positive' in review_data:
+                pct = review_data['percent_positive']
+                if pct is not None and 0 <= pct <= 100:
                     metadata['review_score'] = pct / 10.0  # Convert to 0-10 scale
-        except:
-            metadata['review_score'] = None
+        except Exception as e:
+            pass  # Use default
     
     except Exception as e:
-        print(f"  [metadata] Error fetching metadata for {appid}: {e}")
+        # Use defaults on error
+        pass
     
     return metadata
 
@@ -177,29 +182,38 @@ def create_staggered_panel_google_style():
             # Fetch historical monthly data
             monthly_data = fetch_monthly_series(appid)
             
-            # Create lookup dict by month
+            # Create lookup dict by month using 'avg' player count
             monthly_lookup = {}
             for entry in monthly_data:
                 try:
                     date_str = entry.get("date", "")
                     if date_str:
-                        date_obj = datetime.strptime(date_str, "%Y-%m")
-                        month_key = date_obj.strftime('%Y-%m')
-                        monthly_lookup[month_key] = entry.get("value", 0)
-                except:
-                    pass
+                        # Handle both YYYY-MM-DD and YYYY-MM formats
+                        if len(date_str) >= 7:  # At least YYYY-MM
+                            month_key = date_str[:7]  # Get YYYY-MM part
+                            avg_players = entry.get("avg", entry.get("peak", 0))
+                            if avg_players and avg_players > 0:
+                                monthly_lookup[month_key] = int(avg_players)
+                except Exception as e:
+                    continue
             
-            # Get current players as fallback
-            current_players = fetch_current_players(appid)
+            # Check if we have complete data for all 5 periods
+            has_complete_data = all(monthly_lookup.get(month.strftime('%Y-%m'), 0) > 0 
+                                   for month in months)
+            
+            if not has_complete_data:
+                # Skip this game - we need complete time-varying data for valid DiD
+                continue
             
             # Create row for each time period
             for period_idx, month in enumerate(months):
                 month_key = month.strftime('%Y-%m')
                 
-                # Get player count
-                players = monthly_lookup.get(month_key)
-                if players is None or players == 0:
-                    players = current_players if current_players else 1000  # Fallback
+                # Get player count from monthly data (guaranteed to exist by earlier check)
+                players = monthly_lookup.get(month_key, 1000)
+                
+                if players == 0:
+                    players = 1000  # Minimum fallback to avoid log(0)
                 
                 # Treatment indicator (1 for treatment groups, 0 for control)
                 treated = 1 if group_name != 'control' else 0
@@ -233,13 +247,13 @@ def create_staggered_panel_google_style():
                     'period': period_idx + 1,
                     'month': month_key,
                     'players': players,
-                    'ln_players': np.log(players),
+                    'ln_players': np.log(max(players, 1)),  # Avoid log(0)
                     # Control variables (game-level, constant across time)
                     'genre_category': metadata['genre_category'],
-                    'age_years': metadata['age_years'] if metadata['age_years'] is not None else np.nan,
-                    'price_usd': metadata['price_usd'] if metadata['price_usd'] is not None else np.nan,
+                    'age_years': metadata['age_years'],
+                    'price_usd': metadata['price_usd'],
                     'is_free': metadata['is_free'],
-                    'review_score': metadata['review_score'] if metadata['review_score'] is not None else np.nan
+                    'review_score': metadata['review_score']
                 }
                 
                 # Add time dummies
@@ -850,10 +864,10 @@ def plot_event_study_relative_time(df, model_name='staggered'):
         return None, None
 
 
-def plot_event_study(df, model3):
+def plot_event_study(df, model3, model_name='model2'):
     """Create event study plot showing cohort-specific treatment effects over time."""
     print("\n" + "="*80)
-    print("CREATING EVENT STUDY PLOT")
+    print(f"CREATING EVENT STUDY PLOT - {model_name.upper()}")
     print("="*80)
     
     # Extract cohort-specific coefficients from Model 3
@@ -974,7 +988,7 @@ def plot_event_study(df, model3):
     plt.tight_layout()
     
     # Save
-    filename = 'staggered_did_event_study.png'
+    filename = f'staggered_did_event_study_{model_name}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
     print(f"[OK] Event study plot saved to: {filename}")
     plt.close()
@@ -1067,8 +1081,13 @@ def plot_parallel_trends(df, model, model_name='model2'):
 
 def plot_did_effect_lines(df, model, model_name='model2'):
     """
-    Create DiD effect visualization showing all time periods with counterfactual.
-    Shows the DiD effect with a green arrow, similar to February 2025 analysis.
+    Create DiD effect visualization showing treatment vs control with counterfactual.
+    
+    Simplified approach:
+    - Control Group: Average ln_players for control games over time
+    - Treatment Group: Average ln_players for treated games over time
+    - Counterfactual: What treatment group would look like without treatment
+                     (= pre-treatment level + control group's change over time)
     """
     print("\n" + "="*80)
     print(f"CREATING DiD EFFECT PLOT (WITH COUNTERFACTUAL LINES) - {model_name.upper()}")
@@ -1078,22 +1097,29 @@ def plot_did_effect_lines(df, model, model_name='model2'):
     period_means = df.groupby(['period', 'treated'])['ln_players'].mean().reset_index()
     
     # Separate treatment and control
-    control_means = period_means[period_means['treated'] == 0].sort_values('period')
-    treatment_means = period_means[period_means['treated'] == 1].sort_values('period')
+    control_means = period_means[period_means['treated'] == 0].sort_values('period').reset_index(drop=True)
+    treatment_means = period_means[period_means['treated'] == 1].sort_values('period').reset_index(drop=True)
     
-    # Get DiD effect from MODEL
+    # Get DiD effect from model
     did_coef_model = model.params.get('did', 0.0)
     percent_change_model = (np.exp(did_coef_model) - 1) * 100
     did_pval = model.pvalues.get('did', 1.0)
     
-    # Calculate counterfactual: what treatment would have been without the patch
-    # Counterfactual = actual treatment - model's DiD effect (in log scale)
-    treatment_means_copy = treatment_means.copy()
-    treatment_means_copy['ln_players_counterfactual'] = treatment_means_copy['ln_players'] - did_coef_model
+    # Calculate counterfactual:
+    # Pre-treatment (period 1): Same as actual treatment group
+    # Post-treatment (periods 2-5): Treatment group's period 1 level + control group's change from period 1
     
-    # Time labels
-    month_labels = ['Dec 2024', 'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025']
-    periods = range(1, 6)
+    treatment_period1 = treatment_means[treatment_means['period'] == 1]['ln_players'].values[0]
+    control_period1 = control_means[control_means['period'] == 1]['ln_players'].values[0]
+    
+    # Counterfactual for each period = treatment_period1 + (control_period_t - control_period1)
+    counterfactual = []
+    for period in range(1, 6):
+        control_period_t = control_means[control_means['period'] == period]['ln_players'].values[0]
+        cf_value = treatment_period1 + (control_period_t - control_period1)
+        counterfactual.append({'period': period, 'ln_players_cf': cf_value})
+    
+    counterfactual_df = pd.DataFrame(counterfactual)
     
     # Time labels
     month_labels = ['Dec 2024', 'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025']
@@ -1102,37 +1128,36 @@ def plot_did_effect_lines(df, model, model_name='model2'):
     # Create plot
     fig, ax = plt.subplots(figsize=(14, 8))
     
-    # Plot control group across all periods
+    # Plot control group
     ax.plot(control_means['period'], control_means['ln_players'], 'o-',
             color='coral', linewidth=3, markersize=12,
             label='Control Group', zorder=3)
     
-    # Plot treatment group (actual) across all periods
+    # Plot treatment group (actual)
     ax.plot(treatment_means['period'], treatment_means['ln_players'], 's-',
             color='steelblue', linewidth=3, markersize=12,
             label='Treatment Group (Actual)', zorder=3)
     
-    # Plot counterfactual (what treatment would have been without patches)
-    ax.plot(treatment_means_copy['period'], treatment_means_copy['ln_players_counterfactual'], 's--',
+    # Plot counterfactual (parallel to control, shifted to treatment's pre-treatment level)
+    ax.plot(counterfactual_df['period'], counterfactual_df['ln_players_cf'], 's--',
             color='steelblue', linewidth=2.5, markersize=10, alpha=0.5,
             label='Counterfactual (No Patch)', zorder=2)
     
-    # Add shaded region showing DiD effect visually
-    # Fill between actual and counterfactual for post-treatment periods (period 2-5, averaging)
+    # Add shaded region showing DiD effect for post-treatment periods (period 2+)
     if abs(did_coef_model) > 0.001:
-        post_periods = treatment_means_copy[treatment_means_copy['period'] >= 2]['period']
+        post_periods = counterfactual_df[counterfactual_df['period'] >= 2]['period']
         actual_post = treatment_means[treatment_means['period'] >= 2]['ln_players']
-        counterfactual_post_vals = treatment_means_copy[treatment_means_copy['period'] >= 2]['ln_players_counterfactual']
+        counterfactual_post = counterfactual_df[counterfactual_df['period'] >= 2]['ln_players_cf']
         
-        ax.fill_between(post_periods, actual_post, counterfactual_post_vals,
+        ax.fill_between(post_periods, actual_post, counterfactual_post,
                         alpha=0.2, color='green', label='DiD Effect Region')
     
     # Add arrow showing DiD effect at the last period
     last_period = 5
     treatment_last = treatment_means[treatment_means['period'] == last_period]['ln_players'].values[0]
-    counterfactual_last = treatment_means_copy[treatment_means_copy['period'] == last_period]['ln_players_counterfactual'].values[0]
+    counterfactual_last = counterfactual_df[counterfactual_df['period'] == last_period]['ln_players_cf'].values[0]
     
-    if abs(did_coef_model) > 0.01:  # Only show arrow if effect is visible
+    if abs(treatment_last - counterfactual_last) > 0.01:  # Only show arrow if effect is visible
         ax.annotate('', xy=(last_period, treatment_last), xytext=(last_period, counterfactual_last),
                     arrowprops=dict(arrowstyle='<->', color='green', lw=3))
         # Position text to the right of arrow
@@ -1142,13 +1167,19 @@ def plot_did_effect_lines(df, model, model_name='model2'):
                 fontsize=11, fontweight='bold', color='green',
                 verticalalignment='center')
     
-    # Add vertical line indicating average treatment timing
-    ax.axvline(x=2.5, color='red', linestyle='--', linewidth=2, alpha=0.5,
-              label='Avg Treatment Start', zorder=1)
-    
-    # Add vertical line indicating average treatment timing
-    ax.axvline(x=2.5, color='red', linestyle='--', linewidth=2, alpha=0.5,
-              label='Avg Treatment Start', zorder=1)
+    # Add vertical lines for each cohort's treatment timing
+    # Jan cohort: treated at period 2 (Jan 2025)
+    ax.axvline(x=1.5, color='#e74c3c', linestyle='--', linewidth=1.5, alpha=0.6,
+              label='Jan Cohort Treatment', zorder=1)
+    # Feb cohort: treated at period 3 (Feb 2025)
+    ax.axvline(x=2.5, color='#3498db', linestyle='--', linewidth=1.5, alpha=0.6,
+              label='Feb Cohort Treatment', zorder=1)
+    # Mar cohort: treated at period 4 (Mar 2025)
+    ax.axvline(x=3.5, color='#2ecc71', linestyle='--', linewidth=1.5, alpha=0.6,
+              label='Mar Cohort Treatment', zorder=1)
+    # Apr cohort: treated at period 5 (Apr 2025)
+    ax.axvline(x=4.5, color='#f39c12', linestyle='--', linewidth=1.5, alpha=0.6,
+              label='Apr Cohort Treatment', zorder=1)
     
     # Formatting
     ax.set_xlabel('Time Period', fontsize=14, fontweight='bold')
@@ -1183,6 +1214,135 @@ def plot_did_effect_lines(df, model, model_name='model2'):
     filename = f'staggered_did_effect_lines_{model_name}.png'
     plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
     print(f"[OK] DiD effect (lines) plot saved to: {filename}")
+    plt.close()
+    
+    return fig
+
+
+def plot_did_effect_actual_players(df, model, model_name='model2'):
+    """
+    Create DiD effect visualization with ACTUAL player counts (not log).
+    This makes the effect more visible and interpretable.
+    """
+    print("\n" + "="*80)
+    print(f"CREATING DiD EFFECT PLOT - ACTUAL PLAYER COUNTS - {model_name.upper()}")
+    print("="*80)
+    
+    # Calculate means for each period and group
+    period_means = df.groupby(['period', 'treated'])['players'].mean().reset_index()
+    
+    # Separate treatment and control
+    control_means = period_means[period_means['treated'] == 0].sort_values('period').reset_index(drop=True)
+    treatment_means = period_means[period_means['treated'] == 1].sort_values('period').reset_index(drop=True)
+    
+    # Get DiD effect from model (still in log terms)
+    did_coef_model = model.params.get('did', 0.0)
+    percent_change_model = (np.exp(did_coef_model) - 1) * 100
+    did_pval = model.pvalues.get('did', 1.0)
+    
+    # Calculate counterfactual in actual player counts
+    # Pre-treatment (period 1): Same as actual treatment group
+    # Post-treatment: Treatment group's period 1 level + control group's change from period 1
+    treatment_period1 = treatment_means[treatment_means['period'] == 1]['players'].values[0]
+    control_period1 = control_means[control_means['period'] == 1]['players'].values[0]
+    
+    counterfactual = []
+    for period in range(1, 6):
+        control_period_t = control_means[control_means['period'] == period]['players'].values[0]
+        cf_value = treatment_period1 + (control_period_t - control_period1)
+        counterfactual.append({'period': period, 'players_cf': cf_value})
+    
+    counterfactual_df = pd.DataFrame(counterfactual)
+    
+    # Time labels
+    month_labels = ['Dec 2024', 'Jan 2025', 'Feb 2025', 'Mar 2025', 'Apr 2025']
+    periods = range(1, 6)
+    
+    # Create plot
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    # Plot control group
+    ax.plot(control_means['period'], control_means['players'], 'o-',
+            color='coral', linewidth=3, markersize=12,
+            label='Control Group', zorder=3)
+    
+    # Plot treatment group (actual)
+    ax.plot(treatment_means['period'], treatment_means['players'], 's-',
+            color='steelblue', linewidth=3, markersize=12,
+            label='Treatment Group (Actual)', zorder=3)
+    
+    # Plot counterfactual
+    ax.plot(counterfactual_df['period'], counterfactual_df['players_cf'], 's--',
+            color='steelblue', linewidth=2.5, markersize=10, alpha=0.5,
+            label='Counterfactual (No Patch)', zorder=2)
+    
+    # Add shaded region showing DiD effect
+    post_periods = counterfactual_df[counterfactual_df['period'] >= 2]['period']
+    actual_post = treatment_means[treatment_means['period'] >= 2]['players']
+    counterfactual_post = counterfactual_df[counterfactual_df['period'] >= 2]['players_cf']
+    
+    ax.fill_between(post_periods, actual_post, counterfactual_post,
+                    alpha=0.2, color='green', label='DiD Effect Region')
+    
+    # Add arrow showing DiD effect at the last period
+    last_period = 5
+    treatment_last = treatment_means[treatment_means['period'] == last_period]['players'].values[0]
+    counterfactual_last = counterfactual_df[counterfactual_df['period'] == last_period]['players_cf'].values[0]
+    
+    if abs(treatment_last - counterfactual_last) > 10:  # Only show if visible
+        ax.annotate('', xy=(last_period, treatment_last), xytext=(last_period, counterfactual_last),
+                    arrowprops=dict(arrowstyle='<->', color='green', lw=3))
+        mid_point = (treatment_last + counterfactual_last) / 2
+        ax.text(last_period + 0.15, mid_point,
+                f'DiD Effect:\n{percent_change_model:+.2f}%',
+                fontsize=11, fontweight='bold', color='green',
+                verticalalignment='center')
+    
+    # Add vertical lines for cohort treatment timing
+    ax.axvline(x=1.5, color='#e74c3c', linestyle='--', linewidth=1.5, alpha=0.6,
+              label='Jan Cohort Treatment', zorder=1)
+    ax.axvline(x=2.5, color='#3498db', linestyle='--', linewidth=1.5, alpha=0.6,
+              label='Feb Cohort Treatment', zorder=1)
+    ax.axvline(x=3.5, color='#2ecc71', linestyle='--', linewidth=1.5, alpha=0.6,
+              label='Mar Cohort Treatment', zorder=1)
+    ax.axvline(x=4.5, color='#f39c12', linestyle='--', linewidth=1.5, alpha=0.6,
+              label='Apr Cohort Treatment', zorder=1)
+    
+    # Formatting
+    ax.set_xlabel('Time Period', fontsize=14, fontweight='bold')
+    ax.set_ylabel('Average Concurrent Players', fontsize=14, fontweight='bold')
+    ax.set_title('Difference-in-Differences: Effect of Major Patches on Player Counts\n' +
+                f'Staggered DiD Analysis - {model_name.upper()} (Actual Player Counts)',
+                fontsize=16, fontweight='bold', pad=20)
+    
+    ax.set_xlim(0.7, 5.3)
+    ax.set_xticks(periods)
+    ax.set_xticklabels(month_labels, fontsize=11)
+    
+    # Format y-axis with commas
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f'{int(x):,}'))
+    
+    ax.legend(loc='best', fontsize=11, framealpha=0.95, edgecolor='black')
+    ax.grid(True, alpha=0.3, linestyle=':', linewidth=1)
+    
+    # Add interpretation note
+    if did_pval < 0.05:
+        interpretation = f"DiD Estimate: {percent_change_model:+.2f}% (p={did_pval:.4f}, significant)"
+        note_color = 'lightgreen'
+    else:
+        interpretation = f"DiD Estimate: {percent_change_model:+.2f}% (p={did_pval:.4f}, not significant)"
+        note_color = 'lightyellow'
+    
+    ax.text(0.5, 0.02, interpretation,
+           transform=ax.transAxes, fontsize=11, fontweight='bold',
+           ha='center', bbox=dict(boxstyle='round', facecolor=note_color, alpha=0.8))
+    
+    plt.tight_layout()
+    
+    # Save
+    filename = f'staggered_did_effect_actual_players_{model_name}.png'
+    plt.savefig(filename, dpi=300, bbox_inches='tight', facecolor='white')
+    print(f"[OK] DiD effect (actual players) plot saved to: {filename}")
     plt.close()
     
     return fig
@@ -1296,6 +1456,7 @@ def main():
     print("-"*80)
     parallel_fig_m1 = plot_parallel_trends(df, model1, model_name='model1')
     did_lines_fig_m1 = plot_did_effect_lines(df, model1, model_name='model1')
+    did_actual_fig_m1 = plot_did_effect_actual_players(df, model1, model_name='model1')
     
     # February-style visualizations for Model 2 (With Game FE)
     print("\n" + "-"*80)
@@ -1303,12 +1464,17 @@ def main():
     print("-"*80)
     parallel_fig_m2 = plot_parallel_trends(df, model2, model_name='model2')
     did_lines_fig_m2 = plot_did_effect_lines(df, model2, model_name='model2')
+    did_actual_fig_m2 = plot_did_effect_actual_players(df, model2, model_name='model2')
     
     # Simple coefficient plot
     did_fig = plot_did_effect(model2)
     
-    # Event study plot (cohort-specific)
-    event_fig, coefs_df = plot_event_study(df, model3)
+    # Event study plots (cohort-specific) for both models
+    print("\n" + "-"*80)
+    print("EVENT STUDY PLOTS (COHORT-SPECIFIC EFFECTS)")
+    print("-"*80)
+    event_fig_m1, coefs_df_m1 = plot_event_study(df, model3, model_name='model1')
+    event_fig_m2, coefs_df_m2 = plot_event_study(df, model3, model_name='model2')
     
     # Event study plot (relative time)
     event_rel_fig, event_rel_coefs = plot_event_study_relative_time(df, model_name='staggered')
@@ -1321,13 +1487,16 @@ def main():
     print("  2. staggered_did_results.json - Regression results summary")
     print("\n  Model 1 Visualizations (Pooled OLS):")
     print("  3. staggered_parallel_trends_model1.png - Parallel trends with 95% CI")
-    print("  4. staggered_did_effect_lines_model1.png - DiD effect with counterfactual")
+    print("  4. staggered_did_effect_lines_model1.png - DiD effect with counterfactual (log scale)")
+    print("  5. staggered_did_effect_actual_players_model1.png - DiD effect (actual player counts)")
+    print("  6. staggered_event_study_relative_model1.png - Event study (relative time)")
     print("\n  Model 2 Visualizations (With Game FE):")
-    print("  5. staggered_parallel_trends_model2.png - Parallel trends with 95% CI")
-    print("  6. staggered_did_effect_lines_model2.png - DiD effect with counterfactual")
-    print("  7. staggered_did_effect_plot.png - Simple DiD coefficient plot")
-    print("  8. staggered_did_event_study.png - Cohort-specific event study")
-    print("  9. staggered_event_study_relative_staggered.png - Event study (relative time)")
+    print("  7. staggered_parallel_trends_model2.png - Parallel trends with 95% CI")
+    print("  8. staggered_did_effect_lines_model2.png - DiD effect with counterfactual (log scale)")
+    print("  9. staggered_did_effect_actual_players_model2.png - DiD effect (actual player counts)")
+    print("  10. staggered_did_effect_plot.png - Simple DiD coefficient plot")
+    print("  11. staggered_did_event_study.png - Cohort-specific event study")
+    print("  12. staggered_event_study_relative_staggered.png - Event study (relative time)")
     print("="*80)
 
 

@@ -16,6 +16,7 @@ class SteamDBScraper:
     """
 
     BASE_URL = "https://steamdb.info/app/{appid}/"
+    GRAPHS_URL = "https://steamdb.info/app/{appid}/graphs/"
 
     DEFAULT_USER_AGENTS = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -124,3 +125,88 @@ class SteamDBScraper:
         if result:
             self.cache.set("steamdb_app", appid, result)
         return result
+    def fetch_player_history(self, appid: int) -> list:
+        """Fetch historical player count data from SteamDB graphs page.
+        
+        Returns list of dicts: {'date': 'YYYY-MM-DD', 'players': int}
+        """
+        # Check cache first
+        cached = self.cache.get("steamdb_graphs", appid)
+        if cached is not None:
+            return cached
+        
+        url = self.GRAPHS_URL.format(appid=appid)
+        html = self._get_html(url)
+        if not html:
+            return []
+        
+        # SteamDB embeds chart data in JavaScript
+        # Look for patterns like: data: [[timestamp, value], ...]
+        results = []
+        
+        try:
+            # Extract JavaScript data arrays
+            # Common pattern: data: [[1609459200000, 12345], [1609545600000, 12456], ...]
+            pattern = r'data:\s*\[\s*(\[\s*\d+\s*,\s*\d+[^\]]*\]\s*,?\s*)+\]'
+            matches = re.findall(pattern, html, re.DOTALL)
+            
+            for match in matches:
+                # Extract individual [timestamp, value] pairs
+                pairs = re.findall(r'\[(\d+)\s*,\s*(\d+(?:\.\d+)?)\]', match)
+                for ts_str, val_str in pairs:
+                    try:
+                        timestamp = int(ts_str)
+                        # Convert milliseconds to seconds if needed
+                        if timestamp > 10000000000:  # Likely milliseconds
+                            timestamp = timestamp / 1000
+                        
+                        from datetime import datetime
+                        date = datetime.utcfromtimestamp(timestamp)
+                        players = int(float(val_str))
+                        
+                        results.append({
+                            'date': date.strftime('%Y-%m-%d'),
+                            'players': players
+                        })
+                    except:
+                        continue
+            
+            # If we found data, cache it
+            if results:
+                self.cache.set("steamdb_graphs", appid, results)
+                return results
+            
+            # Alternative: look for JSON-LD or other embedded data
+            soup = BeautifulSoup(html, "lxml")
+            scripts = soup.find_all('script')
+            for script in scripts:
+                script_text = script.string
+                if not script_text:
+                    continue
+                
+                # Look for chart data patterns
+                if 'chart' in script_text.lower() or 'data' in script_text.lower():
+                    # Try to extract timestamp-value pairs
+                    pairs = re.findall(r'\[(\d{10,13})\s*,\s*(\d+(?:\.\d+)?)\]', script_text)
+                    for ts_str, val_str in pairs:
+                        try:
+                            timestamp = int(ts_str)
+                            if timestamp > 10000000000:
+                                timestamp = timestamp / 1000
+                            
+                            from datetime import datetime
+                            date = datetime.utcfromtimestamp(timestamp)
+                            players = int(float(val_str))
+                            
+                            results.append({
+                                'date': date.strftime('%Y-%m-%d'),
+                                'players': players
+                            })
+                        except:
+                            continue
+        except Exception as e:
+            print(f"  [steamdb] Error parsing graphs for {appid}: {e}")
+        
+        # Cache even empty results to avoid repeated failures
+        self.cache.set("steamdb_graphs", appid, results)
+        return results

@@ -1,0 +1,30 @@
+{
+  "model_pooled": {
+    "did_coefficient": 0.34340686144414967,
+    "std_error": 0.07471518107628955,
+    "p_value": 4.302395866833577e-06,
+    "ci_lower": 0.19696779743623355,
+    "ci_upper": 0.4898459254520658,
+    "percent_change": 40.974221501404394,
+    "r_squared": 0.25935332182657445
+  },
+  "model_with_game_fe": {
+    "did_coefficient": 0.060369091243148314,
+    "std_error": 0.029845621161972317,
+    "p_value": 0.04310286566006913,
+    "ci_lower": 0.0018727486694560952,
+    "ci_upper": 0.11886543381684053,
+    "percent_change": 6.22285334513617,
+    "r_squared": 0.9755310045931819
+  },
+  "n_observations": 1850,
+  "n_games": 319,
+  "n_time_periods": 5,
+  "treatment_groups": [
+    "jan",
+    "feb",
+    "mar",
+    "apr"
+  ],
+  "control_group_size": 100
+}

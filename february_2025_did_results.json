@@ -1,12 +1,21 @@
 {
-  "analysis_date": "2026-01-30T10:42:21.173488",
+  "analysis_date": "2026-02-03T14:08:07.039857",
   "treatment_date": "2025-02-15T00:00:00",
   "n_treatment_games": 96,
   "n_control_games": 89,
   "total_observations": 760,
-  "did_coefficient": -0.005638613632128475,
-  "did_std_error": 0.01732167256619457,
-  "did_pvalue": 0.7447848058154771,
-  "r_squared": 0.12760436735720726,
-  "interpretation": "Major patches are associated with a -0.56% change in player counts"
+  "model1_pooled_ols": {
+    "did_coefficient": 0.017730368184436074,
+    "did_std_error": 0.01698942363906122,
+    "did_pvalue": 0.29666488961298776,
+    "r_squared": 0.34689013074083674,
+    "percent_change": 1.7888484265497828
+  },
+  "model2_twoway_fe": {
+    "did_coefficient": 0.017730368184454393,
+    "did_std_error": 0.0194841094356677,
+    "did_pvalue": 0.36282714913749436,
+    "r_squared": 0.9961506416229877,
+    "percent_change": 1.7888484265516258
+  }
 }
