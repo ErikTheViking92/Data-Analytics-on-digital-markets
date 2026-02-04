@@ -1,21 +1,21 @@
 {
-  "analysis_date": "2026-02-03T14:08:07.039857",
+  "analysis_date": "2026-02-03T17:42:51.930292",
   "treatment_date": "2025-02-15T00:00:00",
   "n_treatment_games": 96,
   "n_control_games": 89,
   "total_observations": 760,
   "model1_pooled_ols": {
-    "did_coefficient": 0.017730368184436074,
-    "did_std_error": 0.01698942363906122,
-    "did_pvalue": 0.29666488961298776,
-    "r_squared": 0.34689013074083674,
-    "percent_change": 1.7888484265497828
+    "did_coefficient": -0.019165758788654785,
+    "did_std_error": 0.01678821369678497,
+    "did_pvalue": 0.25361204991437714,
+    "r_squared": 0.32686226932912654,
+    "percent_change": -1.8983263381046833
   },
   "model2_twoway_fe": {
-    "did_coefficient": 0.017730368184454393,
-    "did_std_error": 0.0194841094356677,
-    "did_pvalue": 0.36282714913749436,
-    "r_squared": 0.9961506416229877,
-    "percent_change": 1.7888484265516258
+    "did_coefficient": -0.01916575878863036,
+    "did_std_error": 0.01925335431307292,
+    "did_pvalue": 0.31951726808766745,
+    "r_squared": 0.9957089277965544,
+    "percent_change": -1.8983263381022963
   }
 }

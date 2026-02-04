@@ -1,24 +1,24 @@
 {
   "model_pooled": {
-    "did_coefficient": 0.34340686144414967,
-    "std_error": 0.07471518107628955,
-    "p_value": 4.302395866833577e-06,
-    "ci_lower": 0.19696779743623355,
-    "ci_upper": 0.4898459254520658,
-    "percent_change": 40.974221501404394,
-    "r_squared": 0.25935332182657445
+    "did_coefficient": 0.34137601212481317,
+    "std_error": 0.074487474410697,
+    "p_value": 4.583544865952449e-06,
+    "ci_lower": 0.19538324498049817,
+    "ci_upper": 0.48736877926912814,
+    "percent_change": 40.68821461636751,
+    "r_squared": 0.2591245248260221
   },
   "model_with_game_fe": {
-    "did_coefficient": 0.060369091243148314,
-    "std_error": 0.029845621161972317,
-    "p_value": 0.04310286566006913,
-    "ci_lower": 0.0018727486694560952,
-    "ci_upper": 0.11886543381684053,
-    "percent_change": 6.22285334513617,
-    "r_squared": 0.9755310045931819
+    "did_coefficient": 0.05987786695412865,
+    "std_error": 0.029783485220614192,
+    "p_value": 0.044384793454890444,
+    "ci_lower": 0.001503308587643852,
+    "ci_upper": 0.11825242532061345,
+    "percent_change": 6.170686913282242,
+    "r_squared": 0.9754747303798726
   },
-  "n_observations": 1850,
-  "n_games": 319,
+  "n_observations": 1855,
+  "n_games": 320,
   "n_time_periods": 5,
   "treatment_groups": [
     "jan",
