@@ -1,0 +1,12 @@
+{
+  "model": "Two-Way Fixed Effects",
+  "coefficient": 0.05804542673579855,
+  "std_error": 0.03082344599589291,
+  "p_value": 0.059678924605587526,
+  "ci_low": -0.002368527416151553,
+  "ci_high": 0.11845938088774866,
+  "effect_size_pct": 5.976313619684381,
+  "n_obs": 2166,
+  "n_games": 310,
+  "n_periods": 6
+}

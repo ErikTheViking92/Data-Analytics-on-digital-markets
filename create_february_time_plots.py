@@ -120,7 +120,7 @@ for _, row in coefs2_df.iterrows():
 fig, axes = plt.subplots(1, 2, figsize=(16, 7))
 
 week_labels = ['Week 1\n(Feb 1-7)', 'Week 2\n(Feb 8-14)', 'Week 3\n(Feb 15-21)', 'Week 4\n(Feb 22-28)']
-treatment_week = 2.5  # Treatment occurs between Week 2 and Week 3
+treatment_week = 1.5  # Treatment occurs between Week 2 and Week 3 (positions 1 and 2)
 
 # Plot 1: Model 1 (Pooled OLS)
 ax1 = axes[0]

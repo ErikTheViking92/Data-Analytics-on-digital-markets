@@ -1,0 +1,13 @@
+{
+  "model": "Two-Way Fixed Effects (Symmetric Windows)",
+  "coefficient": 0.028334340916375364,
+  "std_error": 0.02963987588957937,
+  "p_value": 0.3390957649434848,
+  "ci_low": -0.029759815827200206,
+  "ci_high": 0.08642849765995093,
+  "effect_size_pct": 2.8739576662371036,
+  "n_obs": 2633,
+  "n_games": 310,
+  "time_span": "Oct 2024 - Jul 2025",
+  "cohort_window": "t-3 to t+3 (7 months each)"
+}
